@@ -27,6 +27,8 @@ contract ContestTest is StdCheats, Test {
     address link;
     uint256 deployerKey;
 
+    event ParticipationAdded(address buyer, uint256 participationsAdded);
+
     function setUp() external {
         DeployContest deployer = new DeployContest();
         (contest, configHelper) = deployer.run();
@@ -36,26 +38,59 @@ contract ContestTest is StdCheats, Test {
             configHelper.s_activeNetworkConfig();
     }
 
-    function testSomething() public {}
+    // Sanity check for initial state
+    function testInitialStateAfterDeployment() public {
+        assert(contest.getContestStatus() == Contest.Status.Open);
+        assert(contest.getDailyLotteryParticipants().length == 0);
+        assertEq(contest.getUsdCoffeePrice(), 150);
+        assertEq(contest.getTotalNumberOfFreeCoffeePrizes(), 50000);
+        assertEq(contest.getTotalNumberOfFreeDonutPrizes(), 50000);
+    }
+
+    // test using mock price feed. Change it once on real Sepolia?
+    function testGetLatestUsdPrice() public {
+        uint256 latestPrice = contest.getLatestEthUsdPrice();
+        assert(latestPrice > 0);
+        assertEq(contest.getLatestEthUsdPrice(), 1852e8);
+    }
+
+    function testGetEthCoffeePrice() public view {
+        uint256 ethCoffeePrice = contest.getEthCoffeePrice();
+        assert(ethCoffeePrice > 0);
+    }
+
+    // test relating to buy coffee logic
+    function testContestRevertWhenNotEnoughEth() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__NotEnoughEthToBuyCoffee.selector);
+        contest.buyCofees{value: 1 wei}(1);
+        vm.stopPrank();
+    }
+
+    function testContestRevertWhenBuyingInvalidNumberOfCoffees() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
+        contest.buyCofees{value: 1 ether}(0);
+        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
+        contest.buyCofees{value: 1 ether}(6);
+        vm.stopPrank();
+    }
+
+    function testContestBuyingOneCoffee() public {
+        vm.startPrank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationAdded(PLAYER, 1);
+        contest.buyCofees{value: 1 ether}(1);
+        assertEq(contest.getParticipationCount(), 1);
+        vm.stopPrank();
+    }
+
+    function testContestBuyingMultipleCoffees() public {
+        vm.startPrank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationAdded(PLAYER, 5);
+        contest.buyCofees{value: 1 ether}(5);
+        assertEq(contest.getParticipationCount(), 5);
+        vm.stopPrank();
+    }
 }
-
-// Layout of Contract:
-// version
-// imports
-// interfaces, libraries, contracts
-// errors
-// Type declarations
-// State variables  1- constants 2- immutables 3- state
-// Events
-// Modifiers
-// Functions
-
-// Layout of Functions:
-// constructor
-// receive function (if exists)
-// fallback function (if exists)
-// external
-// public
-// internal
-// private
-// view & pure functions

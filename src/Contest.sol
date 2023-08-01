@@ -61,7 +61,7 @@ contract Contest {
     ///////////////////////
     // Events /////////////
     ///////////////////////
-    event ParticipationAdded(uint256 participationsAdded);
+    event ParticipationAdded(address buyer, uint256 participationsAdded);
     event RequestSent(uint256 requestId, uint32 numWords);
 
     ///////////////////////
@@ -107,7 +107,7 @@ contract Contest {
         if (msg.value < _ethCoffeePrice * _numberOfCoffees) {
             revert Contest__NotEnoughEthToBuyCoffee();
         }
-        emit ParticipationAdded(_numberOfCoffees);
+        emit ParticipationAdded(msg.sender, _numberOfCoffees);
         s_contestParticipationCount[msg.sender] += _numberOfCoffees;
     }
 
