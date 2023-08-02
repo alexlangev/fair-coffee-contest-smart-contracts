@@ -6,8 +6,9 @@ import {FreeCoffeeToken} from "./FreeCoffeeToken.sol";
 import {FreeDonutToken} from "./FreeDonutToken.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
+import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
 
-contract Contest {
+contract Contest is VRFConsumerBaseV2 {
     ///////////////////////
     // Type Declarations //
     ///////////////////////
@@ -31,6 +32,8 @@ contract Contest {
     error Contest__NotEnoughEthToBuyCoffee();
     error Contest__InvalidNumberOfCoffees();
     error Contest__ContestIsNotOpen();
+    error Contest__NotEnoughParticipations();
+    error Contest__RequestIdDoesntExist();
 
     ///////////////////////
     // State Variables ////
@@ -47,7 +50,7 @@ contract Contest {
 
     Status private s_constestStatus;
     address[] private s_dailyLotteryParticipants;
-    mapping(address => uint256) private s_contestParticipationCount;
+    mapping(address => uint256) private s_contestParticipationCount; // unredeemed
     mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
 
     // VRF shit
@@ -63,6 +66,9 @@ contract Contest {
     ///////////////////////
     event ParticipationAdded(address buyer, uint256 participationsAdded);
     event RequestSent(uint256 requestId, uint32 numWords);
+    event ParticipationRedeemed();
+    event JoinedDailyLottery(address indexed user);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
 
     ///////////////////////
     // Functions //////////
@@ -78,7 +84,7 @@ contract Contest {
         bytes32 gasLane, // keyHash
         uint32 callbackGasLimit,
         address vrfCoordinatorV2
-    ) {
+    ) VRFConsumerBaseV2(vrfCoordinatorV2) {
         i_UsdCoffeePrice = _usdCoffeePrice;
         i_TotalNumberOfFreeCoffeePrizes = _totalNumberOfFreeCoffeePrizes;
         i_TotalNumberOfFreeDonutPrizes = _totalNumberOfFreeDonutPrizes;
@@ -107,25 +113,63 @@ contract Contest {
         if (msg.value < _ethCoffeePrice * _numberOfCoffees) {
             revert Contest__NotEnoughEthToBuyCoffee();
         }
+        
         emit ParticipationAdded(msg.sender, _numberOfCoffees);
         s_contestParticipationCount[msg.sender] += _numberOfCoffees;
     }
 
-    // function redeemParticipation() external returns (bool, bool) {
-    //     // Add VRF logic here!
-    //     return (_wonFreeCoffee, _wonFreeDonut);
-    // }
+    function redeemParticipation() external returns (bool, bool) {
+        if (s_constestStatus != Status.Open) {
+            revert Contest__ContestIsNotOpen();
+        }
+        if(s_contestParticipationCount[msg.sender] < 1){
+            revert Contest__NotEnoughParticipations();
+        }
+        bool _wonFreeCoffee = false;
+        bool _wonFreeDonut = false;
+
+        emit ParticipationRedeemed();
+        s_contestParticipationCount[msg.sender] -= 1;
+        // if not instant winner,
+
+        emit JoinedDailyLottery(msg.sender);
+        s_dailyLotteryParticipants.push(msg.sender);
+
+        return (_wonFreeCoffee, _wonFreeDonut);
+    }
 
     // Only owner?
-    // function requestRandomWords() external returns (uint256 requestId) {
-    //     requestId =
-    //         COORDINATOR.requestRandomWords(keyHash, s_subscriptionId, requestConfirmations, callbackGasLimit, numWords);
-    //     s_requests[requestId] = RequestStatus({randomWords: new uint256[](0), exists: true, fulfilled: false});
-    //     requestIds.push(requestId);
-    //     lastRequestId = requestId;
-    //     emit RequestSent(requestId, numWords);
-    //     return requestId;
-    // }
+    function requestRandomWords() external returns (uint256) {
+        uint256 requestId = i_vrfCoordinator.requestRandomWords(
+            i_gasLane,
+            i_subscriptionId,
+            REQUEST_CONFIRMATIONS,
+            i_callbackGasLimit,
+            NUM_WORDS
+        );
+
+        s_requests[requestId] = RequestStatus({
+            fulfilled: false,
+            exists: true,
+            randomWords: new uint256[](0)
+        });
+
+        emit RequestSent(requestId, NUM_WORDS);
+        return requestId;
+    }
+
+    function fulfillRandomWords(
+        uint256 _requestId,
+        uint256[] memory _randomWords
+    ) internal override {
+        if(!s_requests[_requestId].exists){
+            revert Contest__RequestIdDoesntExist();
+        }
+        s_requests[_requestId].fulfilled = true;
+        s_requests[_requestId].randomWords = _randomWords;
+        emit RequestFulfilled(_requestId, _randomWords);
+    }
+    
     /////////////////////////////
     // View And Pure Functions //
     /////////////////////////////
@@ -169,6 +213,14 @@ contract Contest {
 
     function getContestStatus() public view returns (Status) {
         return s_constestStatus;
+    }
+
+    function getRequestStatus(uint256 _requestId) external view returns (bool, uint256) {
+        if(!s_requests[_requestId].exists){
+            revert Contest__RequestIdDoesntExist();
+        }
+        RequestStatus memory request = s_requests[_requestId];
+        return (request.fulfilled, request.randomWords[0]);
     }
 }
 

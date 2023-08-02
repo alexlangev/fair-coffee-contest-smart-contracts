@@ -9,6 +9,7 @@ import {FreeCoffeeToken} from "../../src/FreeCoffeeToken.sol";
 import {FreeDonutToken} from "../../src/FreeDonutToken.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {MockV3Aggregator} from "../mocks/MockAggregatorV3Interface.sol";
+import {VRFCoordinatorV2Mock} from "../mocks/VRFCoordinatorV2Mock.sol";
 import {ConfigHelper} from "../../script/ConfigHelper.s.sol";
 import {DeployContest} from "../../script/DeployContest.s.sol";
 
@@ -28,6 +29,8 @@ contract ContestTest is StdCheats, Test {
     uint256 deployerKey;
 
     event ParticipationAdded(address buyer, uint256 participationsAdded);
+    event ParticipationRedeemed();
+    event RequestSent(uint256 requestId, uint32 numWords);
 
     function setUp() external {
         DeployContest deployer = new DeployContest();
@@ -38,7 +41,10 @@ contract ContestTest is StdCheats, Test {
             configHelper.s_activeNetworkConfig();
     }
 
-    // Sanity check for initial state
+
+    /////////////////////////////
+    // Initial state ////////////
+    /////////////////////////////
     function testInitialStateAfterDeployment() public {
         assert(contest.getContestStatus() == Contest.Status.Open);
         assert(contest.getDailyLotteryParticipants().length == 0);
@@ -47,7 +53,10 @@ contract ContestTest is StdCheats, Test {
         assertEq(contest.getTotalNumberOfFreeDonutPrizes(), 50000);
     }
 
-    // test using mock price feed. Change it once on real Sepolia?
+
+    /////////////////////////////
+    // Prices ///////////////////
+    /////////////////////////////
     function testGetLatestUsdPrice() public {
         uint256 latestPrice = contest.getLatestEthUsdPrice();
         assert(latestPrice > 0);
@@ -59,7 +68,10 @@ contract ContestTest is StdCheats, Test {
         assert(ethCoffeePrice > 0);
     }
 
-    // test relating to buy coffee logic
+
+    /////////////////////////////
+    // Buying coffees ///////////
+    /////////////////////////////
     function testContestRevertWhenNotEnoughEth() public {
         vm.startPrank(PLAYER);
         vm.expectRevert(Contest.Contest__NotEnoughEthToBuyCoffee.selector);
@@ -92,5 +104,46 @@ contract ContestTest is StdCheats, Test {
         contest.buyCofees{value: 1 ether}(5);
         assertEq(contest.getParticipationCount(), 5);
         vm.stopPrank();
+    }
+
+    /////////////////////////////
+    // Redeem Participation /////
+    /////////////////////////////
+    function testContestRevertWhenRedeemingParticipationWithNoParticipations() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__NotEnoughParticipations.selector);
+        contest.redeemParticipation();
+        vm.stopPrank();
+    }
+
+    function testEventEmittedWhenRedeemingParticipation() public{
+        vm.startPrank(PLAYER);
+        contest.buyCofees{value: 1 ether}(1);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationRedeemed();
+        contest.redeemParticipation();
+        vm.stopPrank();
+    }
+
+    /////////////////////////////
+    // VRF FUNCTIONS ////////////
+    /////////////////////////////
+    function testRequestRandomWordsRequestId() public {
+        vm.startPrank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit RequestSent(1,1);// hardcoded values
+        uint256 requestId = contest.requestRandomWords(); 
+        vm.stopPrank();
+        assert(requestId != 0);
+    }
+
+    function testFulfillRandomWords() public {
+        vm.startPrank(PLAYER);
+        uint256 requestId = contest.requestRandomWords(); 
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
+        vm.stopPrank();
+        (bool requestFulfiled, uint256 randomWord) = contest.getRequestStatus(requestId);
+        assertEq(requestFulfiled, true);
+        assert(randomWord != uint256(0));
     }
 }
