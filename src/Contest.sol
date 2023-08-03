@@ -22,6 +22,7 @@ contract Contest is VRFConsumerBaseV2 {
         bool fulfilled; // whether the request has been successfully fulfilled
         bool exists; // whether a requestId exists
         uint256[] randomWords;
+        address user;
     }
 
     ///////////////////////
@@ -50,8 +51,8 @@ contract Contest is VRFConsumerBaseV2 {
 
     Status private s_constestStatus;
     address[] private s_dailyLotteryParticipants;
-    mapping(address => uint256) private s_contestParticipationCount; // unredeemed
     mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
+    mapping(address => uint256[]) public s_userUnclaimedRandomWords;
 
     // VRF shit
     VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
@@ -59,16 +60,15 @@ contract Contest is VRFConsumerBaseV2 {
     bytes32 private immutable i_gasLane;
     uint32 private immutable i_callbackGasLimit;
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
-    uint32 private constant NUM_WORDS = 1;
 
     ///////////////////////
     // Events /////////////
     ///////////////////////
-    event ParticipationAdded(address buyer, uint256 participationsAdded);
-    event RequestSent(uint256 requestId, uint32 numWords);
+    event ParticipationAdded(address indexed buyer, uint256 participationsAdded, uint256 requestId);
+    event RequestSent(uint256 indexed requestId, uint32 numWords, address indexed user);
     event ParticipationRedeemed();
     event JoinedDailyLottery(address indexed user);
-    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords, address user);
 
     ///////////////////////
     // Functions //////////
@@ -102,7 +102,9 @@ contract Contest is VRFConsumerBaseV2 {
     /////////////////////////////
     // External Functions ///////
     /////////////////////////////
-    function buyCofees(uint256 _numberOfCoffees) external payable {
+
+    // you get a random number request id along with your coffee (your participation receipt)
+    function buyCofees(uint256 _numberOfCoffees) external payable returns (uint256) {
         if (s_constestStatus != Status.Open) {
             revert Contest__ContestIsNotOpen();
         }
@@ -113,48 +115,49 @@ contract Contest is VRFConsumerBaseV2 {
         if (msg.value < _ethCoffeePrice * _numberOfCoffees) {
             revert Contest__NotEnoughEthToBuyCoffee();
         }
+        uint256 requestId = requestRandomWords(uint32(_numberOfCoffees));
+        emit ParticipationAdded(msg.sender, _numberOfCoffees, requestId);
+
+        return requestId;
+    }
+
+    // Ask for random number and get a requestId as receipt
+    // function redeemParticipation() external returns (bool, bool) {
+    //     if (s_constestStatus != Status.Open) {
+    //         revert Contest__ContestIsNotOpen();
+    //     }
+    //     if(s_contestParticipationCount[msg.sender] < 1){
+    //         revert Contest__NotEnoughParticipations();
+    //     }
+    //     bool _wonFreeCoffee = false;
+    //     bool _wonFreeDonut = false;
+
+    //     emit ParticipationRedeemed();
+    //     s_contestParticipationCount[msg.sender] -= 1;
         
-        emit ParticipationAdded(msg.sender, _numberOfCoffees);
-        s_contestParticipationCount[msg.sender] += _numberOfCoffees;
-    }
+    //     emit JoinedDailyLottery(msg.sender);
+    //     s_dailyLotteryParticipants.push(msg.sender);
 
-    function redeemParticipation() external returns (bool, bool) {
-        if (s_constestStatus != Status.Open) {
-            revert Contest__ContestIsNotOpen();
-        }
-        if(s_contestParticipationCount[msg.sender] < 1){
-            revert Contest__NotEnoughParticipations();
-        }
-        bool _wonFreeCoffee = false;
-        bool _wonFreeDonut = false;
+    //     return (_wonFreeCoffee, _wonFreeDonut);
+    // }
 
-        emit ParticipationRedeemed();
-        s_contestParticipationCount[msg.sender] -= 1;
-        // if not instant winner,
-
-        emit JoinedDailyLottery(msg.sender);
-        s_dailyLotteryParticipants.push(msg.sender);
-
-        return (_wonFreeCoffee, _wonFreeDonut);
-    }
-
-    // Only owner?
-    function requestRandomWords() external returns (uint256) {
+    function requestRandomWords(uint32 _numberOfWords) public returns (uint256) {
         uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
             REQUEST_CONFIRMATIONS,
             i_callbackGasLimit,
-            NUM_WORDS
+            _numberOfWords
         );
 
         s_requests[requestId] = RequestStatus({
             fulfilled: false,
             exists: true,
-            randomWords: new uint256[](0)
+            randomWords: new uint256[](0),
+            user: msg.sender
         });
 
-        emit RequestSent(requestId, NUM_WORDS);
+        emit RequestSent(requestId, _numberOfWords, msg.sender);
         return requestId;
     }
 
@@ -167,7 +170,10 @@ contract Contest is VRFConsumerBaseV2 {
         }
         s_requests[_requestId].fulfilled = true;
         s_requests[_requestId].randomWords = _randomWords;
-        emit RequestFulfilled(_requestId, _randomWords);
+        for (uint256 i = 0; i < _randomWords.length; i += 1){
+            s_userUnclaimedRandomWords[s_requests[_requestId].user].push(_randomWords[i]);
+        }
+        emit RequestFulfilled(_requestId, _randomWords, msg.sender);
     }
     
     /////////////////////////////
@@ -207,20 +213,20 @@ contract Contest is VRFConsumerBaseV2 {
         return _ethCoffeePrice;
     }
 
-    function getParticipationCount() public view returns (uint256) {
-        return s_contestParticipationCount[msg.sender];
-    }
-
     function getContestStatus() public view returns (Status) {
         return s_constestStatus;
     }
 
-    function getRequestStatus(uint256 _requestId) external view returns (bool, uint256) {
+    function getRequestStatus(uint256 _requestId) external view returns (bool, uint256[] memory, address) {
         if(!s_requests[_requestId].exists){
             revert Contest__RequestIdDoesntExist();
         }
         RequestStatus memory request = s_requests[_requestId];
-        return (request.fulfilled, request.randomWords[0]);
+        return (request.fulfilled, request.randomWords, request.user);
+    }
+
+    function getUserUnclaimedRandomWords() external view returns(uint256[] memory){
+        return s_userUnclaimedRandomWords[msg.sender];
     }
 }
 
