@@ -12,8 +12,6 @@ contract DeployContest is Script {
     function run() external returns (Contest, ConfigHelper) {
         ConfigHelper configHelper = new ConfigHelper();
         AddConsumer addConsumer = new AddConsumer();
-        FreeCoffeeToken freeCoffeeToken = new FreeCoffeeToken();
-        FreeDonutToken freeDonutToken = new FreeDonutToken();
         (
             uint64 subscriptionId,
             bytes32 gasLane,
@@ -33,6 +31,8 @@ contract DeployContest is Script {
         }
 
         vm.startBroadcast(deployerKey);
+        FreeCoffeeToken freeCoffeeToken = new FreeCoffeeToken();
+        FreeDonutToken freeDonutToken = new FreeDonutToken();
         Contest contest = new Contest(
             150,
             50000,
@@ -44,8 +44,10 @@ contract DeployContest is Script {
             gasLane, // gaslane
             callbackGasLimit,
             vrfCoordinatorV2
-            );
+        );
         vm.stopBroadcast();
+
+
 
         addConsumer.addConsumer(address(contest), vrfCoordinatorV2, subscriptionId, deployerKey);
 

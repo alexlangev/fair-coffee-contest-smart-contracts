@@ -41,6 +41,7 @@ contract Contest is VRFConsumerBaseV2 {
     ///////////////////////
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
+    uint16 private constant REQUEST_CONFIRMATIONS = 3;
 
     uint256 private immutable i_UsdCoffeePrice;
     uint256 private immutable i_TotalNumberOfFreeCoffeePrizes;
@@ -59,7 +60,6 @@ contract Contest is VRFConsumerBaseV2 {
     uint64 private immutable i_subscriptionId;
     bytes32 private immutable i_gasLane;
     uint32 private immutable i_callbackGasLimit;
-    uint16 private constant REQUEST_CONFIRMATIONS = 3;
 
     ///////////////////////
     // Events /////////////
@@ -67,8 +67,10 @@ contract Contest is VRFConsumerBaseV2 {
     event ParticipationAdded(address indexed buyer, uint256 participationsAdded, uint256 requestId);
     event RequestSent(uint256 indexed requestId, uint32 numWords, address indexed user);
     event ParticipationRedeemed();
-    event JoinedDailyLottery(address indexed user);
+    event DailyLotteryJoined(address indexed user);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords, address user);
+    event FreeCoffeeInstantWin(address indexed user);
+    event FreeDonutInstantWin(address indexed user);
 
     ///////////////////////
     // Functions //////////
@@ -117,29 +119,34 @@ contract Contest is VRFConsumerBaseV2 {
         }
         uint256 requestId = requestRandomWords(uint32(_numberOfCoffees));
         emit ParticipationAdded(msg.sender, _numberOfCoffees, requestId);
-
         return requestId;
     }
 
     // Ask for random number and get a requestId as receipt
-    // function redeemParticipation() external returns (bool, bool) {
-    //     if (s_constestStatus != Status.Open) {
-    //         revert Contest__ContestIsNotOpen();
-    //     }
-    //     if(s_contestParticipationCount[msg.sender] < 1){
-    //         revert Contest__NotEnoughParticipations();
-    //     }
-    //     bool _wonFreeCoffee = false;
-    //     bool _wonFreeDonut = false;
+    function redeemParticipation() external {
+        if (s_constestStatus != Status.Open) {
+            revert Contest__ContestIsNotOpen();
+        }
+        if(s_userUnclaimedRandomWords[msg.sender].length < 1){
+            revert Contest__NotEnoughParticipations();
+        }
 
-    //     emit ParticipationRedeemed();
-    //     s_contestParticipationCount[msg.sender] -= 1;
-        
-    //     emit JoinedDailyLottery(msg.sender);
-    //     s_dailyLotteryParticipants.push(msg.sender);
+        uint256 randomWordIndex = s_userUnclaimedRandomWords[msg.sender].length - 1;
+        uint256 randomWord = s_userUnclaimedRandomWords[msg.sender][randomWordIndex];
+        emit ParticipationRedeemed();
+        s_userUnclaimedRandomWords[msg.sender].pop();
 
-    //     return (_wonFreeCoffee, _wonFreeDonut);
-    // }
+        if(randomWord % 100 < 10) {
+            emit FreeCoffeeInstantWin(msg.sender);
+            i_fct.mint(msg.sender, 1); // owner?
+        } else if(randomWord % 100 < 20){
+            emit FreeDonutInstantWin(msg.sender);
+            i_fdt.mint(msg.sender, 1); // owner?
+        } else {
+            emit DailyLotteryJoined(msg.sender);
+            s_dailyLotteryParticipants.push(msg.sender);
+        }
+    }
 
     function requestRandomWords(uint32 _numberOfWords) public returns (uint256) {
         uint256 requestId = i_vrfCoordinator.requestRandomWords(

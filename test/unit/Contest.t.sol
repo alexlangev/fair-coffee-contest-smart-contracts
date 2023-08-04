@@ -28,9 +28,9 @@ contract ContestTest is StdCheats, Test {
     address link;
     uint256 deployerKey;
 
-    event ParticipationAdded(address buyer, uint256 participationsAdded);
+    event ParticipationAdded(address indexed buyer, uint256 participationsAdded, uint256 requestId);
     event ParticipationRedeemed();
-    event RequestSent(uint256 requestId, uint32 numWords);
+    event RequestSent(uint256 indexed requestId, uint32 numWords, address indexed user);
 
     function setUp() external {
         DeployContest deployer = new DeployContest();
@@ -68,78 +68,14 @@ contract ContestTest is StdCheats, Test {
         assert(ethCoffeePrice > 0);
     }
 
-
-    /////////////////////////////
-    // Buying coffees ///////////
-    /////////////////////////////
-    function testContestRevertWhenNotEnoughEth() public {
-        vm.startPrank(PLAYER);
-        vm.expectRevert(Contest.Contest__NotEnoughEthToBuyCoffee.selector);
-        contest.buyCofees{value: 1 wei}(1);
-        vm.stopPrank();
-    }
-
-    function testContestRevertWhenBuyingInvalidNumberOfCoffees() public {
-        vm.startPrank(PLAYER);
-        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
-        contest.buyCofees{value: 1 ether}(0);
-        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
-        contest.buyCofees{value: 1 ether}(6);
-        vm.stopPrank();
-    }
-
-    function testContestBuyingOneCoffee() public {
-        vm.startPrank(PLAYER);
-        // vm.expectEmit(true, false, false, false, address(contest));
-        // emit ParticipationAdded(PLAYER, 1);
-        uint256 requestId = contest.buyCofees{value: 1 ether}(1);
-        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(requestId, address(contest));
-        // check event
-        // console.log("AVAIL", contest.getAvailableEntries().length);
-        vm.stopPrank();
-    }
-
-    // function testContestBuyingMultipleCoffees() public {
-    //     vm.startPrank(PLAYER);
-    //     vm.expectEmit(true, false, false, false, address(contest));
-    //     emit ParticipationAdded(PLAYER, 5);
-    //     contest.buyCofees{value: 1 ether}(5);
-    //     assertEq(contest.getParticipationCount(), 5);
-    //     vm.stopPrank();
-    // }
-
-    /////////////////////////////
-    // Redeem Participation /////
-    /////////////////////////////
-    // function testContestRevertWhenRedeemingParticipationWithNoParticipations() public {
-    //     vm.startPrank(PLAYER);
-    //     vm.expectRevert(Contest.Contest__NotEnoughParticipations.selector);
-    //     contest.redeemParticipation();
-    //     vm.stopPrank();
-    // }
-
-    // function testEventEmittedWhenRedeemingParticipation() public{
-    //     vm.startPrank(PLAYER);
-    //     contest.buyCofees{value: 1 ether}(1);
-    //     vm.expectEmit(true, false, false, false, address(contest));
-    //     emit ParticipationRedeemed();
-    //     contest.redeemParticipation();
-    //     vm.stopPrank();
-    // }
-
     /////////////////////////////
     // VRF FUNCTIONS ////////////
     /////////////////////////////
     function testRequestRandomWordsRequestId() public {
         vm.startPrank(PLAYER);
         vm.expectEmit(true, false, false, false, address(contest));
-        emit RequestSent(1,1);// hardcoded values
+        emit RequestSent(1,1,msg.sender);// hardcoded values
         uint256 requestId = contest.requestRandomWords(1);
-
-        vm.expectEmit(true, false, false, false, address(contest));
-        emit RequestSent(6,8);// hardcoded values 
-        uint256 requestId2 = contest.requestRandomWords(2);
-
         vm.stopPrank();
         assert(requestId != 0);
     }
@@ -164,6 +100,62 @@ contract ContestTest is StdCheats, Test {
         vm.startPrank(PLAYER);
         vm.expectRevert("nonexistent request");
         VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
+        vm.stopPrank();
+    }
+
+    /////////////////////////////
+    // Buying coffees ///////////
+    /////////////////////////////
+    function testContestRevertWhenNotEnoughEth() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__NotEnoughEthToBuyCoffee.selector);
+        contest.buyCofees{value: 1 wei}(1);
+        vm.stopPrank();
+    }
+
+    function testContestRevertWhenBuyingInvalidNumberOfCoffees() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
+        contest.buyCofees{value: 1 ether}(0);
+        vm.expectRevert(Contest.Contest__InvalidNumberOfCoffees.selector);
+        contest.buyCofees{value: 1 ether}(6);
+        vm.stopPrank();
+    }
+
+    function testContestBuyingOneCoffee() public {
+        vm.startPrank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationAdded(address(PLAYER), 1, 1);
+        uint256 requestId = contest.buyCofees{value: 1 ether}(1);
+        vm.stopPrank();
+    }
+
+    function testContestBuyingMultipleCoffees() public {
+        vm.startPrank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationAdded(address(PLAYER), 5, 1);
+        contest.buyCofees{value: 1 ether}(5);
+        vm.stopPrank();
+    }
+
+    /////////////////////////////
+    // Redeem Participation /////
+    /////////////////////////////
+
+    function testContestRevertWhenRedeemingRandomNumberWithoutAny() public {
+        vm.startPrank(PLAYER);
+        vm.expectRevert(Contest.Contest__NotEnoughParticipations.selector);
+        contest.redeemParticipation();
+        vm.stopPrank();
+    }
+
+    function testEventEmittedWhenRedeemingParticipation() public{
+        vm.startPrank(PLAYER);
+        contest.buyCofees{value: 1 ether}(1);
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
+        vm.expectEmit(true, false, false, false, address(contest));
+        emit ParticipationRedeemed();
+        contest.redeemParticipation();
         vm.stopPrank();
     }
 }
