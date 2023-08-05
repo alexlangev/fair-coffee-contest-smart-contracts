@@ -152,7 +152,9 @@ contract ContestTest is StdCheats, Test {
     function testEventEmittedWhenRedeemingParticipation() public{
         vm.startPrank(PLAYER);
         contest.buyCofees{value: 1 ether}(1);
+
         VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
+        
         vm.expectEmit(true, false, false, false, address(contest));
         emit ParticipationRedeemed();
         contest.redeemParticipation();

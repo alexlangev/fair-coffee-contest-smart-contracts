@@ -29,7 +29,7 @@ contract DeployContest is Script {
             FundSubscription fundSubscription = new FundSubscription();
             fundSubscription.fundSubscription(vrfCoordinatorV2, subscriptionId, link, deployerKey);
         }
-
+        
         vm.startBroadcast(deployerKey);
         FreeCoffeeToken freeCoffeeToken = new FreeCoffeeToken();
         FreeDonutToken freeDonutToken = new FreeDonutToken();
@@ -43,7 +43,8 @@ contract DeployContest is Script {
             subscriptionId,
             gasLane, // gaslane
             callbackGasLimit,
-            vrfCoordinatorV2
+            vrfCoordinatorV2, 
+            1 days
         );
         vm.stopBroadcast();
 
