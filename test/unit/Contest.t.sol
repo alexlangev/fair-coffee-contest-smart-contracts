@@ -28,19 +28,33 @@ contract ContestTest is StdCheats, Test {
     address link;
     uint256 deployerKey;
 
-    event ParticipationAdded(address indexed buyer, uint256 participationsAdded, uint256 requestId);
+    event ParticipationAdded(
+        address indexed buyer,
+        uint256 participationsAdded,
+        uint256 requestId
+    );
     event ParticipationRedeemed();
-    event RequestSent(uint256 indexed requestId, uint32 numWords, address indexed user);
+    event RequestSent(
+        uint256 indexed requestId,
+        uint32 numWords,
+        address indexed user
+    );
 
     function setUp() external {
         DeployContest deployer = new DeployContest();
         (contest, configHelper) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
 
-        (subscriptionId, gasLane, callbackGasLimit, aggregatorV3Interface, vrfCoordinatorV2, link, deployerKey) =
-            configHelper.s_activeNetworkConfig();
+        (
+            subscriptionId,
+            gasLane,
+            callbackGasLimit,
+            aggregatorV3Interface,
+            vrfCoordinatorV2,
+            link,
+            deployerKey
+        ) = configHelper.s_activeNetworkConfig();
     }
-
 
     /////////////////////////////
     // Initial state ////////////
@@ -52,7 +66,6 @@ contract ContestTest is StdCheats, Test {
         assertEq(contest.getTotalNumberOfFreeCoffeePrizes(), 50000);
         assertEq(contest.getTotalNumberOfFreeDonutPrizes(), 50000);
     }
-
 
     /////////////////////////////
     // Prices ///////////////////
@@ -74,7 +87,7 @@ contract ContestTest is StdCheats, Test {
     function testRequestRandomWordsRequestId() public {
         vm.startPrank(PLAYER);
         vm.expectEmit(true, false, false, false, address(contest));
-        emit RequestSent(1,1,msg.sender);// hardcoded values
+        emit RequestSent(1, 1, msg.sender); // hardcoded values
         uint256 requestId = contest.requestRandomWords(1);
         vm.stopPrank();
         assert(requestId != 0);
@@ -82,12 +95,20 @@ contract ContestTest is StdCheats, Test {
 
     function testFulfillRandomWords() public {
         vm.startPrank(PLAYER);
-        uint256 requestId1 = contest.requestRandomWords(1); 
-        uint256 requestId2 = contest.requestRandomWords(5); 
-        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
-        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(2, address(contest));
-        (bool requestFulfiled1, uint256[] memory randomWords1, ) = contest.getRequestStatus(requestId1);
-        (bool requestFulfiled2, uint256[] memory randomWords2, ) = contest.getRequestStatus(requestId2);
+        uint256 requestId1 = contest.requestRandomWords(1);
+        uint256 requestId2 = contest.requestRandomWords(5);
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(
+            1,
+            address(contest)
+        );
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(
+            2,
+            address(contest)
+        );
+        (bool requestFulfiled1, uint256[] memory randomWords1, ) = contest
+            .getRequestStatus(requestId1);
+        (bool requestFulfiled2, uint256[] memory randomWords2, ) = contest
+            .getRequestStatus(requestId2);
         assertEq(requestFulfiled1, true);
         assertEq(requestFulfiled2, true);
         assertEq(randomWords1.length, 1);
@@ -99,7 +120,10 @@ contract ContestTest is StdCheats, Test {
     function testRevertWhenFulfillRandomWordWithInvalidRequestId() public {
         vm.startPrank(PLAYER);
         vm.expectRevert("nonexistent request");
-        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(
+            1,
+            address(contest)
+        );
         vm.stopPrank();
     }
 
@@ -149,12 +173,15 @@ contract ContestTest is StdCheats, Test {
         vm.stopPrank();
     }
 
-    function testEventEmittedWhenRedeemingParticipation() public{
+    function testEventEmittedWhenRedeemingParticipation() public {
         vm.startPrank(PLAYER);
         contest.buyCofees{value: 1 ether}(1);
 
-        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(1, address(contest));
-        
+        VRFCoordinatorV2Mock(vrfCoordinatorV2).fulfillRandomWords(
+            1,
+            address(contest)
+        );
+
         vm.expectEmit(true, false, false, false, address(contest));
         emit ParticipationRedeemed();
         contest.redeemParticipation();

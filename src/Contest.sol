@@ -45,6 +45,8 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
+    uint256 private constant LOTTERY_PRIZE_DIVISOR = 20; // move to immutable?
+    uint256 private constant CONTEST_DURATION = 30 days;
 
     uint256 private immutable i_UsdCoffeePrice;
     uint256 private immutable i_TotalNumberOfFreeCoffeePrizes;
@@ -59,7 +61,9 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
     mapping(address => uint256[]) public s_userUnclaimedRandomWords;
     uint256 private s_lastTimeStamp;
-    uint256 s_lastRandomWord; // TODO BETTER OPTION?
+    uint256 private s_contestBeginingTimestamp;
+    uint256 s_lastRandomWord;
+    uint256 s_dailyJackpot;
 
     // VRF shit
     VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
@@ -78,6 +82,7 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     event FreeCoffeeInstantWin(address indexed user);
     event FreeDonutInstantWin(address indexed user);
     event DailyLotteryDraw(address indexed winner);
+    event ContestIsClosed();
 
     ///////////////////////
     // Functions //////////
@@ -108,6 +113,7 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         i_callbackGasLimit = callbackGasLimit;
         i_interval = interval;
         s_lastTimeStamp = block.timestamp;
+        s_contestBeginingTimestamp = block.timestamp;
     }
 
     /////////////////////////////
@@ -128,6 +134,7 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         }
         uint256 requestId = requestRandomWords(uint32(_numberOfCoffees));
         emit ParticipationAdded(msg.sender, _numberOfCoffees, requestId);
+        s_dailyJackpot += msg.value;
         return requestId;
     }
 
@@ -201,38 +208,30 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory /* performData */)
     {
-        upkeepNeeded = (block.timestamp - s_lastTimeStamp) > i_interval;
+        upkeepNeeded = (block.timestamp - s_lastTimeStamp) > i_interval && s_constestStatus == Status.Open;
     }
 
 // Daily lottery draw!
     function performUpkeep(bytes calldata /* performData */) external override {
-        if ((block.timestamp - s_lastTimeStamp) > i_interval) {
+        if ((block.timestamp - s_lastTimeStamp) > i_interval && s_constestStatus == Status.Open) {
             s_lastTimeStamp = block.timestamp;
             uint256 indexOfWinner = s_lastRandomWord % s_dailyLotteryParticipants.length;
             address winner = s_dailyLotteryParticipants[indexOfWinner];
-            (bool success,) = winner.call{value: address(this).balance}(""); // TODO change this
+
+            (bool success,) = winner.call{value: getDailyJackpotValue()}("");
             if (!success) {
                 revert Contest__TransferFailed();
             }
             emit DailyLotteryDraw(winner);
             s_dailyLotteryParticipants = new address[](0);
+            s_dailyJackpot = 0;
+
+            if(block.timestamp  - s_contestBeginingTimestamp > CONTEST_DURATION){
+                s_constestStatus = Status.Closed;
+                emit ContestIsClosed(); 
+            }
         }
     }
-
-
-        // uint256 indexOfWinner = randomWords[0] % s_players.length;
-        // address payable recentWinner = s_players[indexOfWinner];
-        // s_recentWinner = recentWinner;
-        // s_players = new address payable[](0);
-        // s_raffleState = RaffleState.OPEN;
-        // s_lastTimeStamp = block.timestamp;
-        // (bool success,) = recentWinner.call{value: address(this).balance}("");
-        // // require(success, "Transfer failed");
-        // if (!success) {
-        //     revert Raffle__TransferFailed();
-        // }
-        // emit WinnerPicked(recentWinner);
-
 
     /////////////////////////////
     // View And Pure Functions //
@@ -285,5 +284,9 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
 
     function getUserUnclaimedRandomWords() external view returns(uint256[] memory){
         return s_userUnclaimedRandomWords[msg.sender];
+    }
+
+    function getDailyJackpotValue() public view returns(uint256) {
+        return s_dailyJackpot / 20; // returns 5%
     }
 }
