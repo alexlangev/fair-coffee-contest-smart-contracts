@@ -19,7 +19,8 @@ contract ConfigHelper is Script {
 
     uint8 public constant DECIMALS = 8;
     int256 public constant INITIAL_PRICE = 1852e8;
-    uint256 public DEFAULT_ANVIL_PRIVATE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+    uint256 public DEFAULT_ANVIL_PRIVATE_KEY =
+        0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
 
     NetworkConfig public s_activeNetworkConfig;
 
@@ -27,7 +28,7 @@ contract ConfigHelper is Script {
 
     constructor() {
         if (block.chainid == 11155111) {
-            // sepolia stuff
+            // TODO add sepolia testnet network config
         } else {
             s_activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
@@ -49,7 +50,9 @@ contract ConfigHelper is Script {
         LinkToken _link = new LinkToken();
         vm.stopBroadcast();
 
-        emit HelperConfig__CreatedMockVRFCoordinator(address(_vrfCoordinatorV2Mock));
+        emit HelperConfig__CreatedMockVRFCoordinator(
+            address(_vrfCoordinatorV2Mock)
+        );
 
         NetworkConfig memory _anvilNetworkConfig = NetworkConfig({
             subscriptionId: 0,

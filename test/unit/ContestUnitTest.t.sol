@@ -13,7 +13,7 @@ import {VRFCoordinatorV2Mock} from "../mocks/VRFCoordinatorV2Mock.sol";
 import {ConfigHelper} from "../../script/ConfigHelper.s.sol";
 import {DeployContest} from "../../script/DeployContest.s.sol";
 
-contract ContestTest is StdCheats, Test {
+contract ContestUnitTest is StdCheats, Test {
     address public PLAYER = makeAddr("player");
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
 
@@ -65,11 +65,13 @@ contract ContestTest is StdCheats, Test {
         assertEq(contest.getUsdCoffeePrice(), 150);
         assertEq(contest.getTotalNumberOfFreeCoffeePrizes(), 50000);
         assertEq(contest.getTotalNumberOfFreeDonutPrizes(), 50000);
+        assertEq(contest.getDailyLotteryParticipants().length, 0);
+        assertEq(contest.getDailyJackpotValue(), 0);
     }
 
-    /////////////////////////////
-    // Prices ///////////////////
-    /////////////////////////////
+    // /////////////////////////////
+    // // Prices ///////////////////
+    // /////////////////////////////
     function testGetLatestUsdPrice() public {
         uint256 latestPrice = contest.getLatestEthUsdPrice();
         assert(latestPrice > 0);
@@ -81,13 +83,13 @@ contract ContestTest is StdCheats, Test {
         assert(ethCoffeePrice > 0);
     }
 
-    /////////////////////////////
-    // VRF FUNCTIONS ////////////
-    /////////////////////////////
+    // /////////////////////////////
+    // // VRF FUNCTIONS ////////////
+    // /////////////////////////////
     function testRequestRandomWordsRequestId() public {
         vm.startPrank(PLAYER);
         vm.expectEmit(true, false, false, false, address(contest));
-        emit RequestSent(1, 1, msg.sender); // hardcoded values
+        emit RequestSent(1, 1, msg.sender);
         uint256 requestId = contest.requestRandomWords(1);
         vm.stopPrank();
         assert(requestId != 0);
@@ -127,9 +129,9 @@ contract ContestTest is StdCheats, Test {
         vm.stopPrank();
     }
 
-    /////////////////////////////
-    // Buying coffees ///////////
-    /////////////////////////////
+    // /////////////////////////////
+    // // Buying coffees ///////////
+    // /////////////////////////////
     function testContestRevertWhenNotEnoughEth() public {
         vm.startPrank(PLAYER);
         vm.expectRevert(Contest.Contest__NotEnoughEthToBuyCoffee.selector);
@@ -162,9 +164,9 @@ contract ContestTest is StdCheats, Test {
         vm.stopPrank();
     }
 
-    /////////////////////////////
-    // Redeem Participation /////
-    /////////////////////////////
+    // /////////////////////////////
+    // // Redeem Participation /////
+    // /////////////////////////////
 
     function testContestRevertWhenRedeemingRandomNumberWithoutAny() public {
         vm.startPrank(PLAYER);

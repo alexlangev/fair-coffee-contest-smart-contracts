@@ -10,7 +10,6 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/inter
 import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
 
 contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
-
     ///////////////////////
     // Type Declarations //
     ///////////////////////
@@ -51,19 +50,20 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     uint256 private immutable i_UsdCoffeePrice;
     uint256 private immutable i_TotalNumberOfFreeCoffeePrizes;
     uint256 private immutable i_TotalNumberOfFreeDonutPrizes;
-    uint256 public immutable i_interval;
+    uint256 private immutable i_interval;
     FreeCoffeeToken private immutable i_fct;
     FreeDonutToken private immutable i_fdt;
     AggregatorV3Interface private immutable i_ethUsdPriceFeed;
 
     Status private s_constestStatus;
     address[] private s_dailyLotteryParticipants;
-    mapping(uint256 => RequestStatus) public s_requests; /* requestId --> requestStatus */
+    mapping(uint256 => RequestStatus)
+        public s_requests; /* requestId --> requestStatus */
     mapping(address => uint256[]) public s_userUnclaimedRandomWords;
     uint256 private s_lastTimeStamp;
     uint256 private s_contestBeginingTimestamp;
-    uint256 s_lastRandomWord;
-    uint256 s_dailyJackpot;
+    uint256 private s_lastRandomWord;
+    uint256 private s_dailyJackpot;
 
     // VRF shit
     VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
@@ -74,11 +74,23 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     ///////////////////////
     // Events /////////////
     ///////////////////////
-    event ParticipationAdded(address indexed buyer, uint256 participationsAdded, uint256 requestId);
-    event RequestSent(uint256 indexed requestId, uint32 numWords, address indexed user);
+    event ParticipationAdded(
+        address indexed buyer,
+        uint256 participationsAdded,
+        uint256 requestId
+    );
+    event RequestSent(
+        uint256 indexed requestId,
+        uint32 numWords,
+        address indexed user
+    );
     event ParticipationRedeemed();
     event DailyLotteryJoined(address indexed user);
-    event RequestFulfilled(uint256 requestId, uint256[] randomWords, address user);
+    event RequestFulfilled(
+        uint256 requestId,
+        uint256[] randomWords,
+        address user
+    );
     event FreeCoffeeInstantWin(address indexed user);
     event FreeDonutInstantWin(address indexed user);
     event DailyLotteryDraw(address indexed winner);
@@ -121,7 +133,9 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     /////////////////////////////
 
     // you get a random number request id along with your coffee (your participation receipt)
-    function buyCofees(uint256 _numberOfCoffees) external payable returns (uint256) {
+    function buyCofees(
+        uint256 _numberOfCoffees
+    ) external payable returns (uint256) {
         if (s_constestStatus != Status.Open) {
             revert Contest__ContestIsNotOpen();
         }
@@ -143,19 +157,22 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         if (s_constestStatus != Status.Open) {
             revert Contest__ContestIsNotOpen();
         }
-        if(s_userUnclaimedRandomWords[msg.sender].length < 1){
+        if (s_userUnclaimedRandomWords[msg.sender].length < 1) {
             revert Contest__NotEnoughParticipations();
         }
 
-        uint256 randomWordIndex = s_userUnclaimedRandomWords[msg.sender].length - 1;
-        uint256 randomWord = s_userUnclaimedRandomWords[msg.sender][randomWordIndex];
+        uint256 randomWordIndex = s_userUnclaimedRandomWords[msg.sender]
+            .length - 1;
+        uint256 randomWord = s_userUnclaimedRandomWords[msg.sender][
+            randomWordIndex
+        ];
         emit ParticipationRedeemed();
         s_userUnclaimedRandomWords[msg.sender].pop();
 
-        if(randomWord % 100 < 10) {
+        if (randomWord % 100 < 10) {
             emit FreeCoffeeInstantWin(msg.sender);
             i_fct.mint(msg.sender, 1); // owner?
-        } else if(randomWord % 100 < 20){
+        } else if (randomWord % 100 < 20) {
             emit FreeDonutInstantWin(msg.sender);
             i_fdt.mint(msg.sender, 1); // owner?
         } else {
@@ -164,7 +181,9 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         }
     }
 
-    function requestRandomWords(uint32 _numberOfWords) public returns (uint256) {
+    function requestRandomWords(
+        uint32 _numberOfWords
+    ) public returns (uint256) {
         uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
@@ -188,18 +207,20 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         uint256 _requestId,
         uint256[] memory _randomWords
     ) internal override {
-        if(!s_requests[_requestId].exists){
+        if (!s_requests[_requestId].exists) {
             revert Contest__RequestIdDoesntExist();
         }
         s_lastRandomWord = _randomWords[0];
         s_requests[_requestId].fulfilled = true;
         s_requests[_requestId].randomWords = _randomWords;
-        for (uint256 i = 0; i < _randomWords.length; i += 1){
-            s_userUnclaimedRandomWords[s_requests[_requestId].user].push(_randomWords[i]);
+        for (uint256 i = 0; i < _randomWords.length; i += 1) {
+            s_userUnclaimedRandomWords[s_requests[_requestId].user].push(
+                _randomWords[i]
+            );
         }
         emit RequestFulfilled(_requestId, _randomWords, msg.sender);
     }
-    
+
     function checkUpkeep(
         bytes calldata /* checkData */
     )
@@ -208,17 +229,24 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         override
         returns (bool upkeepNeeded, bytes memory /* performData */)
     {
-        upkeepNeeded = (block.timestamp - s_lastTimeStamp) > i_interval && s_constestStatus == Status.Open;
+        upkeepNeeded =
+            (block.timestamp - s_lastTimeStamp) > i_interval &&
+            s_constestStatus == Status.Open;
+        return (upkeepNeeded, "0x");
     }
 
-// Daily lottery draw!
+    // Daily lottery draw!
     function performUpkeep(bytes calldata /* performData */) external override {
-        if ((block.timestamp - s_lastTimeStamp) > i_interval && s_constestStatus == Status.Open) {
+        if (
+            (block.timestamp - s_lastTimeStamp) > i_interval &&
+            s_constestStatus == Status.Open
+        ) {
             s_lastTimeStamp = block.timestamp;
-            uint256 indexOfWinner = s_lastRandomWord % s_dailyLotteryParticipants.length;
+            uint256 indexOfWinner = s_lastRandomWord %
+                s_dailyLotteryParticipants.length;
             address winner = s_dailyLotteryParticipants[indexOfWinner];
 
-            (bool success,) = winner.call{value: getDailyJackpotValue()}("");
+            (bool success, ) = winner.call{value: getDailyJackpotValue()}("");
             if (!success) {
                 revert Contest__TransferFailed();
             }
@@ -226,9 +254,11 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
             s_dailyLotteryParticipants = new address[](0);
             s_dailyJackpot = 0;
 
-            if(block.timestamp  - s_contestBeginingTimestamp > CONTEST_DURATION){
+            if (
+                block.timestamp - s_contestBeginingTimestamp > CONTEST_DURATION
+            ) {
                 s_constestStatus = Status.Closed;
-                emit ContestIsClosed(); 
+                emit ContestIsClosed();
             }
         }
     }
@@ -245,7 +275,11 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         return i_TotalNumberOfFreeDonutPrizes;
     }
 
-    function getDailyLotteryParticipants() public view returns (address[] memory) {
+    function getDailyLotteryParticipants()
+        public
+        view
+        returns (address[] memory)
+    {
         return s_dailyLotteryParticipants;
     }
 
@@ -254,7 +288,7 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
     }
 
     function getLatestEthUsdPrice() public view returns (uint256) {
-        (, int256 _ethUsdPrice,,,) = i_ethUsdPriceFeed.latestRoundData();
+        (, int256 _ethUsdPrice, , , ) = i_ethUsdPriceFeed.latestRoundData();
         if (_ethUsdPrice <= 0) {
             revert Contest__EthUsdPriceMustBeGreaterThanZero();
         }
@@ -263,7 +297,9 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
 
     function getEthCoffeePrice() public view returns (uint256) {
         uint256 _ethUsdPrice = getLatestEthUsdPrice(); // in 1e8 format.
-        uint256 _ethCoffeePrice = (i_UsdCoffeePrice * 1e16 * ADDITIONAL_FEED_PRECISION) / _ethUsdPrice;
+        uint256 _ethCoffeePrice = (i_UsdCoffeePrice *
+            1e16 *
+            ADDITIONAL_FEED_PRECISION) / _ethUsdPrice;
         if (_ethUsdPrice <= 0) {
             revert Contest__EthCoffeePriceMustBeGreaterThanZero();
         }
@@ -274,19 +310,25 @@ contract Contest is VRFConsumerBaseV2, AutomationCompatibleInterface {
         return s_constestStatus;
     }
 
-    function getRequestStatus(uint256 _requestId) external view returns (bool, uint256[] memory, address) {
-        if(!s_requests[_requestId].exists){
+    function getRequestStatus(
+        uint256 _requestId
+    ) external view returns (bool, uint256[] memory, address) {
+        if (!s_requests[_requestId].exists) {
             revert Contest__RequestIdDoesntExist();
         }
         RequestStatus memory request = s_requests[_requestId];
         return (request.fulfilled, request.randomWords, request.user);
     }
 
-    function getUserUnclaimedRandomWords() external view returns(uint256[] memory){
+    function getUserUnclaimedRandomWords()
+        external
+        view
+        returns (uint256[] memory)
+    {
         return s_userUnclaimedRandomWords[msg.sender];
     }
 
-    function getDailyJackpotValue() public view returns(uint256) {
+    function getDailyJackpotValue() public view returns (uint256) {
         return s_dailyJackpot / 20; // returns 5%
     }
 }

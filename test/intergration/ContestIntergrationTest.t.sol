@@ -29,18 +29,6 @@ contract ContestIntergrationTest is StdCheats, Test {
     address link;
     uint256 deployerKey;
 
-    event ParticipationAdded(
-        address indexed buyer,
-        uint256 participationsAdded,
-        uint256 requestId
-    );
-    event ParticipationRedeemed();
-    event RequestSent(
-        uint256 indexed requestId,
-        uint32 numWords,
-        address indexed user
-    );
-
     function setUp() external {
         DeployContest deployer = new DeployContest();
         (contest, configHelper) = deployer.run();
@@ -57,8 +45,4 @@ contract ContestIntergrationTest is StdCheats, Test {
             deployerKey
         ) = configHelper.s_activeNetworkConfig();
     }
-
-    // deploy, no one buys => no lottery
-    function testContestRunsWithoutAnyParticipants() public {}
-    // deploy, lottery first day, lottery second day, end after 30 days
 }
